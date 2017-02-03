@@ -4,6 +4,11 @@
 #include <string>
 #include <cmath>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <linux/fb.h>
+//#include <sys/stat.h>
+#include <fcntl.h>
 
 //Screen dimension constants
 const int SCREEN_WIDTH = 480;
@@ -14,6 +19,78 @@ SDL_Window* gWindow = NULL;
 
 //The window renderer
 SDL_Renderer* gRenderer = NULL;
+
+struct fb_info {
+  int x;
+  int y;
+  int bits;
+};
+
+/**
+ * Util function to get Framebuffer information via ioctl system call in linux kernel
+ */
+bool getFbInfo(std::string fbDevice, struct fb_info* retval){
+  int fbfd = 0; //framebuffer fildescriptor
+  struct fb_var_screeninfo var_info;
+
+  fbfd = open (fbDevice.c_str(), O_RDWR);
+
+  if (fbfd == -1 ){
+    //std::cout << "ERROR" << std::endl;
+    return false;
+  }
+
+  if (ioctl(fbfd, FBIOGET_VSCREENINFO, &var_info)){
+    //std::cout << "Error IOCTL" << std::endl;
+    return false;
+  }
+
+  retval->x = var_info.xres;
+  retval->y = var_info.yres;
+  retval->bits = var_info.bits_per_pixel;
+  close(fbfd);
+
+  return true;
+}
+
+void tftWrite(){
+
+  struct fb_info tftInfo;
+
+  if (getFbInfo("/dev/fb1", &tftInfo)){
+  
+    SDL_Surface* tftSurface;
+    SDL_Renderer* softRenderer;
+    tftSurface = SDL_CreateRGBSurfaceWithFormat(0,tftInfo.x, tftInfo.y, tftInfo.bits, SDL_PIXELFORMAT_RGB565); //TODO: adapt format based on bit depth received from fb device
+    softRenderer = SDL_CreateSoftwareRenderer(tftSurface);
+
+    SDL_SetRenderDrawColor( softRenderer, 0xFF, 0xFF, 0xFF, 0xFF );
+    SDL_RenderClear( softRenderer );
+    SDL_Rect tftRect = {10,10, tftInfo.x - 20, tftInfo.y - 20};
+
+    SDL_SetRenderDrawColor( softRenderer, 0xFF, 0x00, 0x00, 0xFF );
+    SDL_RenderFillRect( softRenderer, &tftRect );
+
+    char *fbp; //pointer to Framebuffer
+    int fbSize = tftInfo.x * tftInfo.y * (tftInfo.bits / 8);
+    int fbfd = open("/dev/fb1", O_RDWR);
+
+    fbp = (char*)mmap(0, fbSize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
+
+    memcpy(fbp, tftSurface->pixels, fbSize);
+
+    munmap(fbp, fbSize);
+    close (fbfd);
+
+    SDL_DestroyRenderer(softRenderer);
+  }
+  else{
+    std::cerr << "Error getting Framebuffer info for TFT on /dev/fb1" << std::endl;
+    exit(1);
+  }
+  
+}
+
 
 bool init(){
   //Initialization flag
@@ -53,14 +130,14 @@ bool init(){
 
 void close()
 {
-	//Destroy window
-	SDL_DestroyRenderer( gRenderer );
-	SDL_DestroyWindow( gWindow );
-	gWindow = NULL;
-	gRenderer = NULL;
+  //Destroy window
+  SDL_DestroyRenderer( gRenderer );
+  SDL_DestroyWindow( gWindow );
+  gWindow = NULL;
+  gRenderer = NULL;
 
-	//Quit SDL subsystems
-	SDL_Quit();
+  //Quit SDL subsystems
+  SDL_Quit();
 }
 
 
@@ -95,6 +172,8 @@ int main( int argc, char* args[] ){
     SDL_Event e;
 
     SDL_Rect fillRect = { 0, (screenInfo.h / 2) - 5, 10, 10 };
+	
+    tftWrite();
     //While application is running
     while( !quit ){
       //Handle events on queue
@@ -172,3 +251,4 @@ int main( int argc, char* args[] ){
   close();
   return 0;
 }
+
