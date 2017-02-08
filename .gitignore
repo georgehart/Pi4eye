@@ -31,3 +31,9 @@
 #Emacs
 *.*~
 *~
+
+#BuildFolder content
+build/*
+
+#Exceutable
+Pi4eye
