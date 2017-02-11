@@ -7,6 +7,17 @@
 #include <cmath>
 #include <unistd.h>
 
+
+//  zo maar wat tekst
+
+void test(int x){
+  int y = 0;
+  if (x == 0){
+    y = 1;
+  }
+}
+
+
 //Screen dimension constants
 const int SCREEN_WIDTH = 1024;
 const int SCREEN_HEIGHT = 768;
